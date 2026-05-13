@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rand;
 
 fn main() {
     App::new()
@@ -7,13 +8,24 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (button_selection, button_system, run_submission).chain(),
+            (
+                create_question,
+                button_selection,
+                button_system,
+                run_submission,
+            )
+                .chain(),
         )
+        .init_resource::<CorrectIndex>()
+        .add_message::<CreateQuestion>()
         .run();
 }
 
 #[derive(Component)]
 struct SelectedOption;
+
+#[derive(Component)]
+struct OptionPanel;
 
 #[derive(Component)]
 struct AnswerButton;
@@ -25,16 +37,19 @@ struct SubmitButton;
 struct AnswerIndex(usize);
 
 #[derive(Message)]
-struct RunSubmission;
+struct CreateQuestion;
+
+#[derive(Resource, Default)]
+struct CorrectIndex(usize);
 
 const BUTTON_COLOR: Color = Color::BLACK;
 const HOVERED_COLOR: Color = Color::srgba(0.7, 0.7, 0.7, 0.7);
 const PRESSED_COLOR: Color = Color::srgba(0.7, 0.9, 0.4, 0.9);
 const SELECTED_COLOR: Color = Color::srgba(0.4, 0.9, 0.4, 0.9);
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, answer_index: ResMut<CorrectIndex>) {
     commands.spawn(Camera2d);
-    commands.spawn(answer_creation());
+    commands.spawn(answer_creation(answer_index));
     commands.spawn(submit_button());
 }
 
@@ -108,21 +123,57 @@ fn button_selection(
     }
 }
 
-fn answer_creation() -> impl Bundle {
+fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
+    let index = rand::random_range(0..4);
+    answer_index.0 = index;
     (
+        OptionPanel,
         Node {
             width: percent(100),
             height: percent(100),
-            top: percent(20),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::ColumnReverse,
             ..default()
         },
         children![
-            create_button(Text::new("1"), 0),
-            create_button(Text::new("2"), 1),
-            create_button(Text::new("3"), 2),
-            create_button(Text::new("4"), 3),
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                children![
+                    create_button(Text::new("1"), 0),
+                    create_button(Text::new("2"), 1),
+                    create_button(Text::new("3"), 2),
+                    create_button(Text::new("4"), 3),
+                ],
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    padding: UiRect::all(px(50)),
+                    ..default()
+                },
+                children![(
+                    Text::new(format!(
+                        "Select {}. Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah",
+                        index + 1
+                    )),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    TextShadow::default(),
+                ),]
+            )
         ],
     )
 }
@@ -159,14 +210,31 @@ fn create_button(text: Text, index: usize) -> impl Bundle {
 }
 
 fn run_submission(
-    submit_query: Single<&Interaction, With<SubmitButton>>,
+    submit_query: Single<&Interaction, (Changed<Interaction>, With<SubmitButton>)>,
     selected_query: Option<Single<&AnswerIndex, With<SelectedOption>>>,
+    mut message_writer: MessageWriter<CreateQuestion>,
+    correct_index: Res<CorrectIndex>,
 ) {
     if **submit_query == Interaction::Pressed
         && let Some(selected) = selected_query
     {
-        if selected.0 == 3 {
-            println!("correct")
+        if selected.0 == correct_index.0 {
+            println!("correct");
+        } else {
+            println!("wrong");
         }
+        message_writer.write(CreateQuestion);
+    }
+}
+
+fn create_question(
+    mut message_reader: MessageReader<CreateQuestion>,
+    option_panel: Single<Entity, With<OptionPanel>>,
+    mut commands: Commands,
+    correct_index: ResMut<CorrectIndex>,
+) {
+    if message_reader.read().next().is_some() {
+        commands.entity(*option_panel).despawn();
+        commands.spawn(answer_creation(correct_index));
     }
 }
