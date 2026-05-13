@@ -1,11 +1,12 @@
 use bevy::prelude::*;
-use rand;
+use rand::{self, random_range};
 
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.4, 0.4, 0.9)))
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
+        .add_systems(PostStartup, start_minigame)
         .add_systems(
             Update,
             (
@@ -16,10 +17,21 @@ fn main() {
             )
                 .chain(),
         )
+        .add_systems(PostUpdate, update_scoreboard)
         .init_resource::<CorrectIndex>()
+        .init_resource::<Score>()
         .add_message::<CreateQuestion>()
+        .init_state::<MiniGame>()
         .run();
 }
+
+#[derive(States, Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
+enum MiniGame {
+    #[default]
+    None = 0,
+    FlameTest = 1,
+}
+const MINIGAME_LIST: [MiniGame; 2] = [MiniGame::None, MiniGame::FlameTest];
 
 #[derive(Component)]
 struct SelectedOption;
@@ -42,15 +54,68 @@ struct CreateQuestion;
 #[derive(Resource, Default)]
 struct CorrectIndex(usize);
 
+#[derive(Resource, Default)]
+struct Score(u16);
+
+#[derive(Component)]
+struct ScoreboardUI;
+
 const BUTTON_COLOR: Color = Color::BLACK;
 const HOVERED_COLOR: Color = Color::srgba(0.7, 0.7, 0.7, 0.7);
 const PRESSED_COLOR: Color = Color::srgba(0.7, 0.9, 0.4, 0.9);
 const SELECTED_COLOR: Color = Color::srgba(0.4, 0.9, 0.4, 0.9);
 
-fn setup(mut commands: Commands, answer_index: ResMut<CorrectIndex>) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
-    commands.spawn(answer_creation(answer_index));
     commands.spawn(submit_button());
+    commands.spawn(create_scoreboard());
+}
+
+fn create_scoreboard() -> impl Bundle {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            right: percent(5),
+            top: percent(5),
+            ..default()
+        },
+        //BackgroundColor(Color::WHITE),
+        children![(
+            ScoreboardUI,
+            Text::new("Score:"),
+            TextFont {
+                font_size: 33.0,
+                ..default()
+            },
+            TextColor(Color::BLACK),
+            //TextShadow::default(),
+            children![(
+                TextSpan::default(),
+                TextFont {
+                    font_size: 33.0,
+                    ..default()
+                },
+                TextColor(Color::BLACK),
+            )],
+        )],
+    )
+}
+
+fn update_scoreboard(
+    score: Res<Score>,
+    scoreboard_query: Single<Entity, With<ScoreboardUI>>,
+    mut writer: TextUiWriter,
+) {
+    *writer.text(*scoreboard_query, 1) = score.0.to_string();
+}
+
+fn start_minigame(
+    mut commands: Commands,
+    mut game_state: ResMut<NextState<MiniGame>>,
+    answer_index: ResMut<CorrectIndex>,
+) {
+    game_state.set(MINIGAME_LIST[random_range(0..MINIGAME_LIST.len())]);
+    commands.spawn(answer_creation(answer_index));
 }
 
 fn submit_button() -> impl Bundle {
@@ -88,7 +153,7 @@ fn submit_button() -> impl Bundle {
                 },
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
                 TextShadow::default(),
-            ),],
+            )]
         )],
     )
 }
@@ -214,12 +279,14 @@ fn run_submission(
     selected_query: Option<Single<&AnswerIndex, With<SelectedOption>>>,
     mut message_writer: MessageWriter<CreateQuestion>,
     correct_index: Res<CorrectIndex>,
+    mut score: ResMut<Score>,
 ) {
     if **submit_query == Interaction::Pressed
         && let Some(selected) = selected_query
     {
         if selected.0 == correct_index.0 {
             println!("correct");
+            score.0 += 1;
         } else {
             println!("wrong");
         }
