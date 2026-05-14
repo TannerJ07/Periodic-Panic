@@ -4,7 +4,7 @@ use rand::{self, random_range};
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.4, 0.4, 0.9)))
-        .add_plugins(DefaultPlugins)
+        .add_plugins((DefaultPlugins, flame_test::flame_test_plugin))
         .add_systems(Startup, setup)
         .add_systems(PostStartup, start_minigame)
         .add_systems(
@@ -107,15 +107,6 @@ fn update_scoreboard(
     mut writer: TextUiWriter,
 ) {
     *writer.text(*scoreboard_query, 1) = score.0.to_string();
-}
-
-fn start_minigame(
-    mut commands: Commands,
-    mut game_state: ResMut<NextState<MiniGame>>,
-    answer_index: ResMut<CorrectIndex>,
-) {
-    game_state.set(MINIGAME_LIST[random_range(0..MINIGAME_LIST.len())]);
-    commands.spawn(answer_creation(answer_index));
 }
 
 fn submit_button() -> impl Bundle {
@@ -303,5 +294,30 @@ fn create_question(
     if message_reader.read().next().is_some() {
         commands.entity(*option_panel).despawn();
         commands.spawn(answer_creation(correct_index));
+    }
+}
+
+fn start_minigame(
+    mut commands: Commands,
+    mut game_state: ResMut<NextState<MiniGame>>,
+    answer_index: ResMut<CorrectIndex>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    game_state.set(MINIGAME_LIST[random_range(0..MINIGAME_LIST.len())]);
+    commands.spawn(answer_creation(answer_index));
+
+    println!("minigame started");
+}
+
+mod flame_test {
+    use super::*;
+
+    pub fn flame_test_plugin(app: &mut App) {
+        app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon);
+    }
+
+    fn create_spoon(mut commands: Commands) {
+        println!("spoon");
     }
 }
