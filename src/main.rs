@@ -311,13 +311,32 @@ fn start_minigame(
 }
 
 mod flame_test {
+    use bevy::{input::mouse::MouseButtonInput, window::PrimaryWindow};
+
     use super::*;
+
+    #[derive(Component)]
+    struct Spoon;
 
     pub fn flame_test_plugin(app: &mut App) {
         app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon);
     }
 
     fn create_spoon(mut commands: Commands) {
+        commands.spawn(Sprite::from_color(Color::BLACK, Vec2::splat(40.)));
         println!("spoon");
+    }
+
+    fn move_spoon(
+        mut spoon: Single<&mut Transform, With<Spoon>>,
+        mut cursor_moved_event_reader: MessageReader<CursorMoved>,
+        window: Single<&PrimaryWindow>,
+        mouse: Res<ButtonInput<MouseButton>>,
+    ) {
+        if mouse.just_pressed(MouseButton::Left) {
+            if let Some(cursor_event) = cursor_moved_event_reader.read().last() {
+                (**spoon).local_x() =  = cursor_event.position.x;
+            }
+        };
     }
 }
