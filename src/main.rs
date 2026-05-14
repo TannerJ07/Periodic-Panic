@@ -301,16 +301,16 @@ fn start_minigame(
     mut commands: Commands,
     mut game_state: ResMut<NextState<MiniGame>>,
     answer_index: ResMut<CorrectIndex>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    game_state.set(MINIGAME_LIST[random_range(0..MINIGAME_LIST.len())]);
+    game_state.set(MINIGAME_LIST[random_range(1..MINIGAME_LIST.len())]);
     commands.spawn(answer_creation(answer_index));
 
     println!("minigame started");
 }
 
 mod flame_test {
+    use std::f32::consts::PI;
+
     use bevy::{input::mouse::MouseButtonInput, window::PrimaryWindow};
 
     use super::*;
@@ -319,23 +319,28 @@ mod flame_test {
     struct Spoon;
 
     pub fn flame_test_plugin(app: &mut App) {
-        app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon);
+        app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon)
+            .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
     }
 
     fn create_spoon(mut commands: Commands) {
-        commands.spawn(Sprite::from_color(Color::BLACK, Vec2::splat(40.)));
+        commands.spawn((Sprite::from_color(Color::BLACK, Vec2::splat(40.)), Spoon));
         println!("spoon");
     }
 
     fn move_spoon(
         mut spoon: Single<&mut Transform, With<Spoon>>,
         mut cursor_moved_event_reader: MessageReader<CursorMoved>,
-        window: Single<&PrimaryWindow>,
+        window: Single<&Window, With<PrimaryWindow>>,
         mouse: Res<ButtonInput<MouseButton>>,
     ) {
-        if mouse.just_pressed(MouseButton::Left) {
+        //println!("test");
+        if mouse.pressed(MouseButton::Left) {
             if let Some(cursor_event) = cursor_moved_event_reader.read().last() {
-                (**spoon).local_x() =  = cursor_event.position.x;
+                spoon.translation = (cursor_event.position - window.size() / 2.)
+                    .extend(0.)
+                    .rotate_x(PI);
+                //println!("yes");
             }
         };
     }
