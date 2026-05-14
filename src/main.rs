@@ -218,10 +218,7 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     ..default()
                 },
                 children![(
-                    Text::new(format!(
-                        "Select {}. Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah Blah",
-                        index + 1
-                    )),
+                    Text::new(format!("Select {}. TODO", index + 1)),
                     TextFont {
                         font_size: 33.0,
                         ..default()
@@ -311,7 +308,7 @@ fn start_minigame(
 mod flame_test {
     use std::f32::consts::PI;
 
-    use bevy::{input::mouse::MouseButtonInput, window::PrimaryWindow};
+    use bevy::window::PrimaryWindow;
 
     use super::*;
 
@@ -323,8 +320,14 @@ mod flame_test {
             .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
     }
 
-    fn create_spoon(mut commands: Commands) {
-        commands.spawn((Sprite::from_color(Color::BLACK, Vec2::splat(40.)), Spoon));
+    fn create_spoon(mut commands: Commands, server: Res<AssetServer>) {
+        commands.spawn((
+            Sprite {
+                image: server.load("spoon.png"),
+                ..default()
+            },
+            Spoon,
+        ));
         println!("spoon");
     }
 
@@ -336,8 +339,10 @@ mod flame_test {
     ) {
         //println!("test");
         if mouse.pressed(MouseButton::Left) {
-            if let Some(cursor_event) = cursor_moved_event_reader.read().last() {
-                spoon.translation = (cursor_event.position - window.size() / 2.)
+            if let Some(cursor_event) = cursor_moved_event_reader.read().last()
+                && cursor_event.position.y < window.size().y / 2.
+            {
+                spoon.translation = (cursor_event.position - window.size() / 2. + vec2(40., 5.))
                     .extend(0.)
                     .rotate_x(PI);
                 //println!("yes");
