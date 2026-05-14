@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, transform};
 use rand::{self, random_range};
 
 fn main() {
@@ -113,9 +113,34 @@ fn start_minigame(
     mut commands: Commands,
     mut game_state: ResMut<NextState<MiniGame>>,
     answer_index: ResMut<CorrectIndex>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     game_state.set(MINIGAME_LIST[random_range(0..MINIGAME_LIST.len())]);
     commands.spawn(answer_creation(answer_index));
+
+    println!("minigame started");
+
+    commands
+        .spawn((
+            //DropArea,
+            Mesh2d(meshes.add(Rectangle::new(40., 40.))),
+            MeshMaterial2d(materials.add(Color::srgb(0.1, 0.4, 0.1))),
+            Transform::IDENTITY,
+            children![(
+                Text2d::new("Drop here"),
+                TextFont::from_font_size(50.),
+                TextColor(Color::BLACK),
+                Pickable::IGNORE,
+                Transform::from_translation(Vec3::Z),
+            )],
+        ))
+        .observe(
+            |drag: On<Pointer<Drag>>, mut transform: Query<&mut Transform>| {
+                transform.get_mut(drag.entity).unwrap().translation = drag.distance.extend(0.0);
+                println!("drag");
+            },
+        );
 }
 
 fn submit_button() -> impl Bundle {
@@ -285,10 +310,10 @@ fn run_submission(
         && let Some(selected) = selected_query
     {
         if selected.0 == correct_index.0 {
-            println!("correct");
+            //println!("correct");
             score.0 += 1;
         } else {
-            println!("wrong");
+            //println!("wrong");
         }
         message_writer.write(CreateQuestion);
     }
