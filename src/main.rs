@@ -189,25 +189,10 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
             height: percent(100),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
-            flex_direction: FlexDirection::ColumnReverse,
+            flex_direction: FlexDirection::Column,
             ..default()
         },
         children![
-            (
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                children![
-                    create_button(Text::new("1"), 0),
-                    create_button(Text::new("2"), 1),
-                    create_button(Text::new("3"), 2),
-                    create_button(Text::new("4"), 3),
-                ],
-            ),
             (
                 Node {
                     width: percent(100),
@@ -226,7 +211,23 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     TextColor(Color::srgb(0.9, 0.9, 0.9)),
                     TextShadow::default(),
                 ),]
-            )
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+                children![
+                    create_button(Text::new("1"), 0),
+                    create_button(Text::new("2"), 1),
+                    create_button(Text::new("3"), 2),
+                    create_button(Text::new("4"), 3),
+                ],
+            ),
         ],
     )
 }
