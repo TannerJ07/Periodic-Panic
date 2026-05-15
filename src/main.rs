@@ -1,12 +1,13 @@
 use bevy::prelude::*;
+use rand::seq::SliceRandom;
 use rand::{self, random_range};
 
 fn main() {
     App::new()
-        .insert_resource(ClearColor(Color::srgb(0.4, 0.4, 0.9)))
+        .insert_resource(ClearColor(Color::srgb(0.6, 0.6, 0.9)))
         .add_plugins((DefaultPlugins, flame_test::flame_test_plugin))
         .add_systems(Startup, setup)
-        .add_systems(PostStartup, start_minigame)
+        .add_systems(PreUpdate, start_minigame.run_if(in_state(MiniGame::None)))
         .add_systems(
             Update,
             (
@@ -133,6 +134,7 @@ fn submit_button() -> impl Bundle {
                     top: px(5),
                     bottom: px(5),
                 },
+
                 ..default()
             },
             BackgroundColor(BUTTON_COLOR),
@@ -179,9 +181,8 @@ fn button_selection(
     }
 }
 
-fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
-    let index = rand::random_range(0..4);
-    answer_index.0 = index;
+fn answer_creation(options: &[&str]) -> impl Bundle {
+    println!("answer");
     (
         OptionPanel,
         Node {
@@ -189,25 +190,10 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
             height: percent(100),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
-            flex_direction: FlexDirection::ColumnReverse,
+            flex_direction: FlexDirection::Column,
             ..default()
         },
         children![
-            (
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                children![
-                    create_button(Text::new("1"), 0),
-                    create_button(Text::new("2"), 1),
-                    create_button(Text::new("3"), 2),
-                    create_button(Text::new("4"), 3),
-                ],
-            ),
             (
                 Node {
                     width: percent(100),
@@ -218,7 +204,7 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     ..default()
                 },
                 children![(
-                    Text::new(format!("Select {}. TODO", index + 1)),
+                    Text::new(format!("Select {}. TODO", 0 + 1)),
                     TextFont {
                         font_size: 33.0,
                         ..default()
@@ -226,7 +212,23 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     TextColor(Color::srgb(0.9, 0.9, 0.9)),
                     TextShadow::default(),
                 ),]
-            )
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+                children![
+                    create_button(Text::new(options[0]), 0),
+                    create_button(Text::new(options[1]), 1),
+                    create_button(Text::new(options[2]), 2),
+                    create_button(Text::new(options[3]), 3),
+                ],
+            ),
         ],
     )
 }
@@ -268,6 +270,7 @@ fn run_submission(
     mut message_writer: MessageWriter<CreateQuestion>,
     correct_index: Res<CorrectIndex>,
     mut score: ResMut<Score>,
+    mut minigame: ResMut<NextState<MiniGame>>,
 ) {
     if **submit_query == Interaction::Pressed
         && let Some(selected) = selected_query
@@ -278,6 +281,7 @@ fn run_submission(
         } else {
             println!("wrong");
         }
+        minigame.set(MiniGame::None);
         message_writer.write(CreateQuestion);
     }
 }
@@ -290,7 +294,6 @@ fn create_question(
 ) {
     if message_reader.read().next().is_some() {
         commands.entity(*option_panel).despawn();
-        commands.spawn(answer_creation(correct_index));
     }
 }
 
@@ -300,15 +303,15 @@ fn start_minigame(
     answer_index: ResMut<CorrectIndex>,
 ) {
     game_state.set(MINIGAME_LIST[random_range(1..MINIGAME_LIST.len())]);
-    commands.spawn(answer_creation(answer_index));
 
     println!("minigame started");
 }
 
 mod flame_test {
-    use std::f32::consts::PI;
+    use std::{collections::HashMap, f32::consts::PI};
 
     use bevy::window::PrimaryWindow;
+    use rand::seq::SliceRandom;
 
     use super::*;
 
@@ -316,8 +319,11 @@ mod flame_test {
     struct Spoon;
 
     pub fn flame_test_plugin(app: &mut App) {
-        app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon)
-            .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
+        app.add_systems(
+            OnEnter(MiniGame::FlameTest),
+            (create_spoon, create_question),
+        )
+        .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
     }
 
     fn create_spoon(mut commands: Commands, server: Res<AssetServer>) {
@@ -329,6 +335,20 @@ mod flame_test {
             Spoon,
         ));
         println!("spoon");
+    }
+
+    fn create_question(mut commands: Commands) {
+        let colors = HashMap::from([
+            ("Cs", "Purple"),
+            ("Li", "Pink"),
+            ("Ca", "Red"),
+            ("Mg", "White"),
+            ("In", "Blue"),
+            ("Cu", "Green"),
+        ]);
+        let mut elements: Vec<&str> = colors.keys().cloned().collect();
+        elements.shuffle(&mut rand::rng());
+        commands.spawn(answer_creation(&elements[..4]));
     }
 
     fn move_spoon(
