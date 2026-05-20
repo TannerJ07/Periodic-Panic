@@ -3,19 +3,20 @@ use rand::{self, random_range};
 
 fn main() {
     App::new()
-        .insert_resource(ClearColor(Color::srgb(0.4, 0.4, 0.9)))
+        .insert_resource(ClearColor(Color::srgb(0.6, 0.6, 0.9)))
         .add_plugins((DefaultPlugins, flame_test::flame_test_plugin))
-        .add_systems(Startup, setup)
-        .add_systems(PostStartup, start_minigame)
+        .add_systems(Startup, title_screen)
+        .add_systems(OnExit(MiniGame::Title), setup)
+        .add_systems(
+            PreUpdate,
+            (remove_questions, start_minigame)
+                .chain()
+                .run_if(in_state(MiniGame::None)),
+        )
+        .add_systems(Update, title_buttons.run_if(in_state(MiniGame::Title)))
         .add_systems(
             Update,
-            (
-                create_question,
-                button_selection,
-                button_system,
-                run_submission,
-            )
-                .chain(),
+            (button_selection, button_system, run_submission).chain(),
         )
         .add_systems(PostUpdate, update_scoreboard)
         .init_resource::<CorrectIndex>()
@@ -28,8 +29,9 @@ fn main() {
 #[derive(States, Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 enum MiniGame {
     #[default]
-    None = 0,
-    FlameTest = 1,
+    Title,
+    None,
+    FlameTest,
 }
 const MINIGAME_LIST: [MiniGame; 2] = [MiniGame::None, MiniGame::FlameTest];
 
@@ -55,7 +57,7 @@ struct CreateQuestion;
 struct CorrectIndex(usize);
 
 #[derive(Resource, Default)]
-struct Score(u16);
+struct Score(u16, u16);
 
 #[derive(Component)]
 struct ScoreboardUI;
@@ -65,8 +67,73 @@ const HOVERED_COLOR: Color = Color::srgba(0.7, 0.7, 0.7, 0.7);
 const PRESSED_COLOR: Color = Color::srgba(0.7, 0.9, 0.4, 0.9);
 const SELECTED_COLOR: Color = Color::srgba(0.4, 0.9, 0.4, 0.9);
 
-fn setup(mut commands: Commands) {
+#[derive(Component)]
+struct MenuAction(MiniGame);
+
+fn title_screen(mut commands: Commands) {
     commands.spawn(Camera2d);
+
+    let button_node = Node {
+        border_radius: BorderRadius::MAX,
+        margin: UiRect::all(px(20)),
+        padding: UiRect {
+            left: px(15),
+            right: px(15),
+            top: px(5),
+            bottom: px(5),
+        },
+        ..default()
+    };
+
+    commands.spawn((
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        DespawnOnExit(MiniGame::Title),
+        children![
+            (
+                Text::new("Periodic Panic!"),
+                TextFont {
+                    font_size: 70.0,
+                    ..default()
+                },
+                TextColor(Color::BLACK),
+            ),
+            (
+                Button,
+                button_node,
+                BackgroundColor(Color::srgb(0.5, 0.5, 0.5)),
+                MenuAction(MiniGame::None),
+                children![(
+                    Text::new("Start Game"),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE)
+                )]
+            )
+        ],
+    ));
+}
+
+fn title_buttons(
+    mut game_state: ResMut<NextState<MiniGame>>,
+    button_query: Query<(&Interaction, &MenuAction)>,
+) {
+    for (interaction, action) in button_query {
+        if *interaction == Interaction::Pressed {
+            game_state.set(action.0);
+        }
+    }
+}
+
+fn setup(mut commands: Commands) {
     commands.spawn(submit_button());
     commands.spawn(create_scoreboard());
 }
@@ -89,14 +156,32 @@ fn create_scoreboard() -> impl Bundle {
             },
             TextColor(Color::BLACK),
             //TextShadow::default(),
-            children![(
-                TextSpan::default(),
-                TextFont {
-                    font_size: 33.0,
-                    ..default()
-                },
-                TextColor(Color::BLACK),
-            )],
+            children![
+                (
+                    TextSpan::default(),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::BLACK),
+                ),
+                (
+                    TextSpan::new("/"),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::BLACK),
+                ),
+                (
+                    TextSpan::default(),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::BLACK),
+                )
+            ],
         )],
     )
 }
@@ -107,6 +192,7 @@ fn update_scoreboard(
     mut writer: TextUiWriter,
 ) {
     *writer.text(*scoreboard_query, 1) = score.0.to_string();
+    *writer.text(*scoreboard_query, 3) = score.1.to_string();
 }
 
 fn submit_button() -> impl Bundle {
@@ -119,6 +205,7 @@ fn submit_button() -> impl Bundle {
             justify_content: JustifyContent::Center,
             ..default()
         },
+        ZIndex(1),
         children![(
             Button,
             SubmitButton,
@@ -133,6 +220,7 @@ fn submit_button() -> impl Bundle {
                     top: px(5),
                     bottom: px(5),
                 },
+
                 ..default()
             },
             BackgroundColor(BUTTON_COLOR),
@@ -179,9 +267,8 @@ fn button_selection(
     }
 }
 
-fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
-    let index = rand::random_range(0..4);
-    answer_index.0 = index;
+fn answer_creation(options: &[&str], question: &str) -> impl Bundle {
+    //println!("answer");
     (
         OptionPanel,
         Node {
@@ -199,6 +286,7 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     height: percent(100),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+<<<<<<< HEAD
                     padding: UiRect::all(px(50)),
                     ..default()
                 },
@@ -226,6 +314,38 @@ fn answer_creation(mut answer_index: ResMut<CorrectIndex>) -> impl Bundle {
                     create_button(Text::new("2"), 1),
                     create_button(Text::new("3"), 2),
                     create_button(Text::new("4"), 3),
+=======
+                    padding: UiRect {
+                        top: px(0.),
+                        ..default()
+                    },
+                    ..default()
+                },
+                children![(
+                    Text::new(question),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    TextShadow::default(),
+                )]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+                children![
+                    create_button(Text::new(options[0]), 0),
+                    create_button(Text::new(options[1]), 1),
+                    create_button(Text::new(options[2]), 2),
+                    create_button(Text::new(options[3]), 3),
+>>>>>>> 5df8858a3cb83c941a45685280523e1464ebbde1
                 ],
             ),
         ],
@@ -269,6 +389,7 @@ fn run_submission(
     mut message_writer: MessageWriter<CreateQuestion>,
     correct_index: Res<CorrectIndex>,
     mut score: ResMut<Score>,
+    mut minigame: ResMut<NextState<MiniGame>>,
 ) {
     if **submit_query == Interaction::Pressed
         && let Some(selected) = selected_query
@@ -279,46 +400,48 @@ fn run_submission(
         } else {
             println!("wrong");
         }
+        score.1 += 1;
+        minigame.set(MiniGame::None);
         message_writer.write(CreateQuestion);
     }
 }
 
-fn create_question(
+fn remove_questions(
     mut message_reader: MessageReader<CreateQuestion>,
     option_panel: Single<Entity, With<OptionPanel>>,
     mut commands: Commands,
-    correct_index: ResMut<CorrectIndex>,
 ) {
     if message_reader.read().next().is_some() {
         commands.entity(*option_panel).despawn();
-        commands.spawn(answer_creation(correct_index));
     }
 }
 
-fn start_minigame(
-    mut commands: Commands,
-    mut game_state: ResMut<NextState<MiniGame>>,
-    answer_index: ResMut<CorrectIndex>,
-) {
+fn start_minigame(mut game_state: ResMut<NextState<MiniGame>>) {
     game_state.set(MINIGAME_LIST[random_range(1..MINIGAME_LIST.len())]);
-    commands.spawn(answer_creation(answer_index));
 
-    println!("minigame started");
+    //println!("minigame started");
 }
 
 mod flame_test {
-    use std::f32::consts::PI;
+    use std::{collections::HashMap, f32::consts::PI};
 
     use bevy::window::PrimaryWindow;
+    use rand::seq::SliceRandom;
 
     use super::*;
 
     #[derive(Component)]
     struct Spoon;
 
+    #[derive(Component)]
+    struct Fire(Color);
+
     pub fn flame_test_plugin(app: &mut App) {
-        app.add_systems(OnEnter(MiniGame::FlameTest), create_spoon)
-            .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
+        app.add_systems(
+            OnEnter(MiniGame::FlameTest),
+            (create_spoon, spawn_flame, create_question).chain(),
+        )
+        .add_systems(Update, move_spoon.run_if(in_state(MiniGame::FlameTest)));
     }
 
     fn create_spoon(mut commands: Commands, server: Res<AssetServer>) {
@@ -328,8 +451,30 @@ mod flame_test {
                 ..default()
             },
             Spoon,
+            DespawnOnExit(MiniGame::FlameTest),
         ));
-        println!("spoon");
+        //println!("spoon");
+    }
+
+    fn create_question(
+        mut commands: Commands,
+        mut fire: Single<(&mut Sprite, &mut Fire)>,
+        mut correct_index: ResMut<CorrectIndex>,
+    ) {
+        let colors = HashMap::from([
+            ("Cs", Color::srgb(0.4, 0.1, 0.5)),  //Purple
+            ("Li", Color::srgb(0.9, 0.6, 0.6)),  //Red
+            ("Ca", Color::srgb(0.9, 0.9, 0.5)),  //Yellow
+            ("Mg", Color::srgb(0.9, 0.95, 0.9)), //White
+            ("In", Color::srgb(0.1, 0.3, 0.8)),  //Blue
+            ("Cu", Color::srgb(0.1, 0.7, 0.2)),  //Green
+        ]);
+        let mut elements: Vec<&str> = colors.keys().cloned().collect();
+        elements.shuffle(&mut rand::rng());
+        correct_index.0 = rand::random_range(0..4);
+        fire.1.0 = colors[elements[correct_index.0]];
+        let question = format!("Which metal is present in the compound?");
+        commands.spawn(answer_creation(&elements[..4], &question));
     }
 
     fn move_spoon(
@@ -337,17 +482,32 @@ mod flame_test {
         mut cursor_moved_event_reader: MessageReader<CursorMoved>,
         window: Single<&Window, With<PrimaryWindow>>,
         mouse: Res<ButtonInput<MouseButton>>,
+        mut fire: Single<(&mut Sprite, &mut Fire)>,
     ) {
         //println!("test");
         if mouse.pressed(MouseButton::Left) {
-            if let Some(cursor_event) = cursor_moved_event_reader.read().last()
-                && cursor_event.position.y < window.size().y / 2.
-            {
-                spoon.translation = (cursor_event.position - window.size() / 2. + vec2(40., 5.))
+            if let Some(cursor_event) = cursor_moved_event_reader.read().last() {
+                if cursor_event.position.y < window.size().y / 2. {
+                    spoon.translation = (cursor_event.position - window.size() / 2.
+                        + vec2(40., 5.))
                     .extend(0.)
                     .rotate_x(PI);
-                //println!("yes");
+                    fire.0.color = if cursor_event.position.x > window.size().x * 3. / 4. - 150. {
+                        fire.1.0
+                    } else {
+                        Color::srgb(0.9, 0.6, 0.1)
+                    };
+                }
             }
         };
+    }
+
+    fn spawn_flame(mut commands: Commands) {
+        commands.spawn((
+            Sprite::from_color(Color::srgb(0.9, 0.6, 0.1), Vec2::new(150., 250.)),
+            Transform::from_translation(Vec3::new(320., 20., -1.)),
+            Fire(Color::BLACK),
+            DespawnOnExit(MiniGame::FlameTest),
+        ));
     }
 }
