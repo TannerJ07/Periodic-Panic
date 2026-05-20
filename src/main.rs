@@ -5,13 +5,15 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.6, 0.6, 0.9)))
         .add_plugins((DefaultPlugins, flame_test::flame_test_plugin))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, title_screen)
+        .add_systems(OnExit(MiniGame::Title), setup)
         .add_systems(
             PreUpdate,
             (remove_questions, start_minigame)
                 .chain()
                 .run_if(in_state(MiniGame::None)),
         )
+        .add_systems(Update, title_buttons.run_if(in_state(MiniGame::Title)))
         .add_systems(
             Update,
             (button_selection, button_system, run_submission).chain(),
@@ -27,8 +29,9 @@ fn main() {
 #[derive(States, Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 enum MiniGame {
     #[default]
-    None = 0,
-    FlameTest = 1,
+    Title,
+    None,
+    FlameTest,
 }
 const MINIGAME_LIST: [MiniGame; 2] = [MiniGame::None, MiniGame::FlameTest];
 
@@ -64,8 +67,73 @@ const HOVERED_COLOR: Color = Color::srgba(0.7, 0.7, 0.7, 0.7);
 const PRESSED_COLOR: Color = Color::srgba(0.7, 0.9, 0.4, 0.9);
 const SELECTED_COLOR: Color = Color::srgba(0.4, 0.9, 0.4, 0.9);
 
-fn setup(mut commands: Commands) {
+#[derive(Component)]
+struct MenuAction(MiniGame);
+
+fn title_screen(mut commands: Commands) {
     commands.spawn(Camera2d);
+
+    let button_node = Node {
+        border_radius: BorderRadius::MAX,
+        margin: UiRect::all(px(20)),
+        padding: UiRect {
+            left: px(15),
+            right: px(15),
+            top: px(5),
+            bottom: px(5),
+        },
+        ..default()
+    };
+
+    commands.spawn((
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        DespawnOnExit(MiniGame::Title),
+        children![
+            (
+                Text::new("Periodic Panic!"),
+                TextFont {
+                    font_size: 70.0,
+                    ..default()
+                },
+                TextColor(Color::BLACK),
+            ),
+            (
+                Button,
+                button_node,
+                BackgroundColor(Color::srgb(0.5, 0.5, 0.5)),
+                MenuAction(MiniGame::None),
+                children![(
+                    Text::new("Start Game"),
+                    TextFont {
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE)
+                )]
+            )
+        ],
+    ));
+}
+
+fn title_buttons(
+    mut game_state: ResMut<NextState<MiniGame>>,
+    button_query: Query<(&Interaction, &MenuAction)>,
+) {
+    for (interaction, action) in button_query {
+        if *interaction == Interaction::Pressed {
+            game_state.set(action.0);
+        }
+    }
+}
+
+fn setup(mut commands: Commands) {
     commands.spawn(submit_button());
     commands.spawn(create_scoreboard());
 }
@@ -137,6 +205,7 @@ fn submit_button() -> impl Bundle {
             justify_content: JustifyContent::Center,
             ..default()
         },
+        ZIndex(1),
         children![(
             Button,
             SubmitButton,
@@ -218,7 +287,7 @@ fn answer_creation(options: &[&str], question: &str) -> impl Bundle {
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     padding: UiRect {
-                        top: px(00.),
+                        top: px(0.),
                         ..default()
                     },
                     ..default()
@@ -231,7 +300,7 @@ fn answer_creation(options: &[&str], question: &str) -> impl Bundle {
                     },
                     TextColor(Color::srgb(0.9, 0.9, 0.9)),
                     TextShadow::default(),
-                ),]
+                )]
             ),
             (
                 Node {
